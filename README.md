@@ -1,4 +1,4 @@
-This is a patch for the game client "Metal Rage Online" to get it to run on Windows 11, written in python.
+This is a patch for the game client "Metal Rage Online" to get it to run on Windows 11, written in Python & C.
 
 The resource protection system Y0da causes compatability issues on Win11 that are not present on previous versions. 
 This patch circumvents that as well as resolves other issues with the game on modern windows versions.
