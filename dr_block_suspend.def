@@ -1,0 +1,6 @@
+LIBRARY dr_block_suspend.dll
+
+EXPORTS
+_DR_CLIENT_AVX512_CODE_IN_USE_
+_USES_DR_VERSION_
+dr_client_main
