@@ -6,5 +6,5 @@ This patch circumvents that as well as resolves other issues with the game on mo
 Client & Installer files avaliable [Here](https://archive.org/download/metal-rage-online-client/MetalRage%20Online/).
 
 The following links were also very useful for working on this:
-Y0da soruce code: https://sourceforge.net/projects/yodap/
-Y0da unpacking scripts: https://github.com/dubuqingfeng/ollydbg-script/tree/master/Yodas%20Protector
+* [Y0da soruce code](https://sourceforge.net/projects/yodap/)
+* [Y0da unpacking scripts](https://github.com/dubuqingfeng/ollydbg-script/tree/master/Yodas%20Protector)
