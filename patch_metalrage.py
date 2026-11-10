@@ -9,6 +9,8 @@ Patches applied:
   1. SizeOfImage alignment (0x6C0CF → 0x6D000)
   2. Force NRV decryption path (NOP the skip-jmp)
   3. NRV decompressor source address (0x400000 → ImageBase)
+  4. DllCharacteristics = 0x0000
+  5. Disable y0da's two TLS callbacks (see README)
 
 Usage: python patch_metalrage.py [path/to/MetalRage.exe]
 """
@@ -61,17 +63,45 @@ def patch(filepath):
     ib_bytes = struct.pack('<I', image_base)  # LE bytes of ImageBase
     enc_bytes = bytes(b ^ 0x21 for b in ib_bytes)
     # Bytes 2-5 of encrypted block (offset +2 to +5 from 0x19233)
-    data[0x19235] = enc_bytes[0]  # low byte
-    data[0x19236] = enc_bytes[1]
-    data[0x19237] = enc_bytes[2]
-    data[0x19238] = enc_bytes[3]  # high byte
-    changes.append(f"NRV source: 0x400000 -> 0x{image_base:08X}")
+    if bytes(data[0x19235:0x19239]) != enc_bytes:
+        data[0x19235] = enc_bytes[0]  # low byte
+        data[0x19236] = enc_bytes[1]
+        data[0x19237] = enc_bytes[2]
+        data[0x19238] = enc_bytes[3]  # high byte
+        changes.append(f"NRV source: 0x400000 -> 0x{image_base:08X}")
 
     # 4. Ensure DllCharacteristics is 0x0000 (no DEP - y0da needs stack exec)
     dll_chars = struct.unpack_from('<H', data, opt + 70)[0]
     if dll_chars != 0x0000:
         struct.pack_into('<H', data, opt + 70, 0x0000)
         changes.append(f"DllCharacteristics: 0x{dll_chars:04X} -> 0x0000")
+
+    # 5. Disable y0da's TLS callbacks (they return with a cdecl 'ret' instead
+    # of 'ret 0xC'; Win11's WoW64 ntdll does not restore esp, so every thread
+    # create/exit jumps to the Reason argument -> access violation -> WER).
+    # TLS directory (file 0x190F9) AddressOfCallBacks at 0x19105 points at
+    # the callback array {0x1095112D, 0x10951159, 0} (file 0x19119).
+    # Point it at the array's terminating 0 (0x10951121) so none is called.
+    # Callback 2 (file 0x19159, 0x5A bytes) is ADD/XOR-encoded and callback 1
+    # used to decode it at PROCESS_ATTACH, so store it pre-decoded.
+    cb_head = bytes.fromhex('9c807c240c01')  # pushfd; cmp byte [esp+0xC],1
+    cb_tail = bytes.fromhex('909d90c3')      # nop; popfd; nop; ret
+    cb_ptr = bytes(data[0x19105:0x19109])
+    cb_arr = bytes(data[0x19119:0x19125])
+    cb2 = bytes(data[0x19159:0x19159 + 0x5A])
+    cb2_dec = bytes((((b + 0xE3) & 0xFF) ^ 0x2C) for b in cb2)
+    if cb_arr != bytes.fromhex('2d11951059119510' '00000000'):
+        print("ERROR: TLS callback array is not the expected one; not touching the file")
+        return False
+    if cb_ptr == bytes.fromhex('19119510') and cb2_dec[:6] == cb_head and cb2_dec[-4:] == cb_tail:
+        data[0x19105:0x19109] = bytes.fromhex('21119510')
+        data[0x19159:0x19159 + 0x5A] = cb2_dec
+        changes.append("TLS callbacks: AddressOfCallBacks 0x10951119 -> 0x10951121, callback 2 pre-decoded")
+    elif cb_ptr == bytes.fromhex('21119510') and cb2[:6] == cb_head and cb2[-4:] == cb_tail:
+        pass  # TLS callbacks already disabled
+    else:
+        print("ERROR: TLS callback bytes are neither original nor patched; not touching the file")
+        return False
 
     if not changes:
         print("No changes needed (already patched?)"); return True
